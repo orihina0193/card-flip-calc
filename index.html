@@ -57,7 +57,6 @@
   <hr style="border-color:#3b3b4a">
   <label class="n">イベント日数<input id="days" type="number" value="3" min="1" max="10"></label>
   <label class="n">イベントでもらえるアタリ数<input id="freeHits" type="number" value="3" min="0"></label>
-  <label class="n">今持っているアイテム数<input id="owned" type="number" value="0" min="0"></label>
   <label class="n">ダイヤ交換するアイテム数（0円扱い）<input id="diamond" type="number" value="0" min="0" max="50"></label>
   <div class="opts" style="margin:6px 0"><label><input type="checkbox" id="balance" checked>45個パックを日ごとになるべく同じ回数にならす（少し高くなることがあります）</label></div>
   <label class="n">1日に使える上限額（円・空欄は上限なし）<input id="cap" type="number" value="" min="0" step="100" placeholder="なし"></label>
@@ -166,7 +165,6 @@ let lastText="";
 function render(){
   const D=Math.min(10,Math.max(1,+document.getElementById("days").value||1));
   const freeHits=Math.max(0,+document.getElementById("freeHits").value||0);
-  const owned=Math.max(0,+document.getElementById("owned").value||0);
   const diamond=Math.min(50,Math.max(0,+document.getElementById("diamond").value||0));
   const cells=Math.max(2,+document.getElementById("cells").value||20);
   const mode="sum"; // 景品はアタリを消費して交換するので、チェックした数の合計が必要
@@ -179,7 +177,7 @@ function render(){
   const hits=Math.max(0,wanted-freeHits);
   const needRakes=hits===0?0:(luck==="exp"?Math.ceil(hits*(cells+1)/2):quantileRakes(hits,cells,0.9));
   const dailyFree=4*D, passI=6;
-  const freeTotal=owned+diamond+passI+dailyFree;
+  const freeTotal=diamond+passI+dailyFree;
   const capIn=+document.getElementById("cap").value;
   const cap=capIn>0?capIn:Infinity;
   const balance=document.getElementById("balance").checked;
@@ -201,7 +199,7 @@ function render(){
   for(let d=1;d<=D;d++){dayPacks[d]=[];dayBig[d]=0;}
   r.picked.filter(x=>x.kind==="daily"||x.kind==="pass").forEach(x=>dayPacks[x.day].push(x));
   r.picked.filter(x=>x.kind==="big").forEach(x=>dayBig[x.day]++);
-  let cum=owned+diamond+passI;
+  let cum=diamond+passI;
   const cums=[];
   for(let d=1;d<=D;d++){
     cum+=4+dayPacks[d].reduce((a,x)=>a+x.rakes,0)+45*dayBig[d];
@@ -214,7 +212,6 @@ function render(){
     {n:`パスⅠ`,rk:passI,y:0},
   ];
   if(diamond>0) freeRows.push({n:"ダイヤ交換",rk:diamond,y:0});
-  if(owned>0) freeRows.push({n:"手持ち",rk:owned,y:0});
   freeRows.push({n:`デイリー（4個×${D}日）`,rk:dailyFree,y:0});
   const freeRk=freeRows.reduce((a,x)=>a+x.rk,0);
   const freeYen=freeRows.reduce((a,x)=>a+x.y,0);
