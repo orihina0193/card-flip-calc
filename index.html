@@ -67,8 +67,8 @@
 
 <p class="note">
 無料分：パスⅠ6個（1日目）とデイリー4個/日は自動で含みます。<br>
-パスⅡ・Ⅲは1回ずつ、毎日パックは1日1回ずつ、45個パックは無制限で計算しています。<br>
-パスや45個パックは、必要アイテムが足りなくなる日に割り当てています。運が良ければ後ろに回して節約できます。
+パスⅡ・Ⅲは1回ずつ計算しています。毎日パックは1日1回ずつで、安い順（160円→800円→1600円→3200円）にしか買えない前提です。45個パックは、その日に3200円パックを買ったときだけ、何回でも買える前提です。<br>
+パスⅡ・Ⅲは最初に買う前提で計算しています。
 </p>
 
 <script>
@@ -89,40 +89,47 @@ function quantileRakes(hits,cells,p){
   return dist.length-1;
 }
 
-function buildItems(days,R){
-  const items=[];
-  items.push({name:"パスⅡ",rakes:14,cost:1600,kind:"pass"});
-  items.push({name:"パスⅢ",rakes:30,cost:3200,kind:"pass"});
-  const daily=[["2個パック",2,160],["6個パック",6,800],["10個パック",10,1600],["20個パック",20,3200]];
-  for(const [n,r,c] of daily) for(let d=1;d<=days;d++) items.push({name:n,rakes:r,cost:c,kind:"daily",day:d});
-  const big=Math.ceil(R/45)+1;
-  for(let i=0;i<big;i++) items.push({name:"45個パック",rakes:45,cost:8000,kind:"big"});
-  return items;
-}
+const DAILY=[["2個パック",2,160],["6個パック",6,800],["10個パック",10,1600],["20個パック",20,3200]];
+const PASSES=[["パスⅡ",14,1600],["パスⅢ",30,3200]];
 
+// 毎日パックは安い順にしか買えない（2個→6個→10個→20個）ので、日ごとに「どこまで買うか」を選ぶ
 function minCost(R,days){
   if(R<=0) return {cost:0,picked:[]};
-  const items=buildItems(days,R), n=items.length, INF=1e15;
-  const dp=[new Array(R+1).fill(INF)]; dp[0][0]=0;
+  const groups=[];
+  PASSES.forEach(([name,rk,c])=>groups.push({opts:[{rk:0,c:0,list:[]},{rk,c,list:[{name,rakes:rk,cost:c,kind:"pass"}]}]}));
+  const K=Math.ceil(R/45)+1;
+  for(let d=1;d<=days;d++){
+    const opts=[{rk:0,c:0,list:[]}]; let rk=0,c=0; const list=[];
+    DAILY.forEach(([name,r,cost])=>{
+      rk+=r;c+=cost;list.push({name,rakes:r,cost,kind:"daily",day:d});
+      opts.push({rk,c,list:list.slice()});
+    });
+    // 3200円パックを買った日だけ、45個パックを何回でも買える
+    const base=opts[opts.length-1];
+    for(let k=1;k<=K;k++) opts.push({rk:base.rk+45*k,c:base.c+8000*k,list:base.list.concat(Array.from({length:k},()=>({name:"45個パック",rakes:45,cost:8000,kind:"big",day:d})))});
+    groups.push({opts});
+  }
+  const n=groups.length, INF=1e15;
+  let dp=new Array(R+1).fill(INF); dp[0]=0;
   const par=[];
   for(let i=0;i<n;i++){
-    const cur=dp[i], nx=cur.slice(), pr=new Array(R+1).fill(null);
-    const {rakes,cost}=items[i];
+    const nx=new Array(R+1).fill(INF), pr=new Array(R+1).fill(null);
     for(let j=0;j<=R;j++){
-      if(cur[j]>=INF)continue;
-      const nj=Math.min(R,j+rakes), v=cur[j]+cost;
-      if(v<nx[nj]){nx[nj]=v; pr[nj]=j;}
+      if(dp[j]>=INF)continue;
+      groups[i].opts.forEach((o,oi)=>{
+        const nj=Math.min(R,j+o.rk), v=dp[j]+o.c;
+        if(v<nx[nj]){nx[nj]=v; pr[nj]={j,oi};}
+      });
     }
-    dp.push(nx); par.push(pr);
+    dp=nx; par.push(pr);
   }
   let j=R; const picked=[];
   for(let i=n-1;i>=0;i--){
-    if(par[i][j]!==null && dp[i+1][j]<dp[i][j]){
-      picked.push(items[i]);
-      j=par[i][j];
-    }
+    const p=par[i][j];
+    groups[i].opts[p.oi].list.forEach(x=>picked.push(x));
+    j=p.j;
   }
-  return {cost:dp[n][R],picked};
+  return {cost:dp[R],picked};
 }
 
 let lastText="";
@@ -151,14 +158,11 @@ function render(){
   for(let d=1;d<=D;d++){dayPacks[d]=[];dayBig[d]=0;}
   const passes=r.picked.filter(x=>x.kind==="pass").sort((a,b)=>a.rakes-b.rakes);
   r.picked.filter(x=>x.kind==="daily").forEach(x=>dayPacks[x.day].push(x));
-  let bigLeft=r.picked.filter(x=>x.kind==="big").length;
+  r.picked.filter(x=>x.kind==="big").forEach(x=>dayBig[x.day]++);
   let cum=owned+diamond+passI+passes.reduce((a,x)=>a+x.rakes,0);
   const cums=[];
   for(let d=1;d<=D;d++){
-    cum+=4+dayPacks[d].reduce((a,x)=>a+x.rakes,0);
-    const target=Math.ceil(needRakes*d/D);
-    while(cum<target && bigLeft>0){dayBig[d]++;bigLeft--;cum+=45;}
-    if(d===D){dayBig[d]+=bigLeft;cum+=45*bigLeft;bigLeft=0;}
+    cum+=4+dayPacks[d].reduce((a,x)=>a+x.rakes,0)+45*dayBig[d];
     cums[d]=cum;
   }
   const totalRakes=cum;
@@ -180,7 +184,7 @@ function render(){
     dayPacks[d].forEach(x=>{g[x.name]=g[x.name]||{n:x.name,rk:x.rakes,y:x.cost,c:0};g[x.name].c++;});
     const rows=Object.values(g).sort((a,b)=>a.rk-b.rk);
     const rowsOut=rows.map(x=>({n:x.n,c:x.c,rk:x.rk*x.c,y:x.y*x.c}));
-    if(dayBig[d]>0) rowsOut.push({n:"45個パック（都度購入）",c:dayBig[d],rk:45*dayBig[d],y:8000*dayBig[d]});
+    if(dayBig[d]>0) rowsOut.push({n:"45個パック（3200円パックの後に購入）",c:dayBig[d],rk:45*dayBig[d],y:8000*dayBig[d]});
     days.push({d,rows:rowsOut,rk:rowsOut.reduce((a,x)=>a+x.rk,0),y:rowsOut.reduce((a,x)=>a+x.y,0)});
   }
 
