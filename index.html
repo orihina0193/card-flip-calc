@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>アイテム最安計算（カードめくり）</title>
+<style>
+  :root{--bg:#1b1b22;--card:#2a2a35;--inner:#20202a;--line:#3b3b4a;--text:#eee;--sub:#a9a9b8;--gold:#ffd166;--green:#6ee7a8;--blue:#7cc4ff}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--text);line-height:1.6;max-width:640px;margin-inline:auto}
+  h1{font-size:1.25rem;margin:0 0 12px}
+  .box{background:var(--card);border-radius:12px;padding:12px;margin-bottom:14px}
+  .box h3{margin:0 0 6px;font-size:.95rem;color:var(--sub)}
+  label.n{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0}
+  input[type=number]{width:90px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;font-size:1rem;text-align:right}
+  .opts label{display:inline-flex;align-items:center;gap:4px;margin:4px 14px 4px 0}
+  .opts input{width:20px;height:20px}
+  .goal{background:linear-gradient(135deg,#3a3350,#2a2a35);border:1px solid #5a4d85;border-radius:12px;padding:14px;margin-bottom:14px}
+  .goal .small{font-size:.85rem;color:var(--sub)}
+  .goal .big{font-size:1.9rem;font-weight:bold;color:var(--gold);line-height:1.3}
+  .sec{background:var(--card);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .sec>.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 12px;background:var(--inner);border-bottom:1px solid var(--line);font-weight:bold}
+  .sec>.hd .r{color:var(--gold);font-size:.95rem}
+  .sec>.hd .r small{color:var(--sub);font-weight:normal}
+  .free .hd{color:var(--green)}
+  .day .hd{color:var(--blue)}
+  table{width:100%;border-collapse:collapse}
+  td{padding:7px 12px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  td.num{text-align:right;white-space:nowrap}
+  td.yen{text-align:right;white-space:nowrap;color:var(--gold)}
+  td.zero{color:var(--sub)}
+  .empty{padding:10px 12px;color:var(--sub)}
+  .sum2{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+  .sum2 div{display:flex;justify-content:space-between;padding:2px 0}
+  .sum2 span:last-child{font-weight:bold}
+  button{padding:10px 14px;border:none;border-radius:8px;background:#5a4d85;color:#fff;font-size:1rem}
+  .note{font-size:.8rem;color:var(--sub)}
+</style>
+</head>
+<body>
+<h1>アイテム最安計算 <small style="font-size:.7em;color:#a9a9b8">（カードめくり）</small></h1>
+
+<div class="box">
+  <h3>ほしい景品（アタリ数）</h3>
+  <div class="opts">
+    <label><input type="checkbox" class="t" value="50">50</label>
+    <label><input type="checkbox" class="t" value="30">30</label>
+    <label><input type="checkbox" class="t" value="10">10</label>
+    <label><input type="checkbox" class="t" value="5" checked>5</label>
+  </div>
+  <h3 style="margin-top:8px">運の見積もり</h3>
+  <div class="opts">
+    <label><input type="radio" name="luck" value="exp" checked>平均</label>
+    <label><input type="radio" name="luck" value="safe">安全（90%足りる）</label>
+  </div>
+  <hr style="border-color:#3b3b4a">
+  <label class="n">イベント日数<input id="days" type="number" value="3" min="1" max="10"></label>
+  <label class="n">イベントでもらえるアタリ数<input id="freeHits" type="number" value="3" min="0"></label>
+  <label class="n">今持っているアイテム数<input id="owned" type="number" value="0" min="0"></label>
+  <label class="n">ダイヤ交換するアイテム数（0円扱い）<input id="diamond" type="number" value="0" min="0" max="50"></label>
+  <label class="n">1周のマス数（当たり1つ）<input id="cells" type="number" value="20" min="2"></label>
+</div>
+
+<div id="out"></div>
+<p><button id="copy">結果をテキストでコピー</button> <span id="copied" class="note"></span></p>
+
+<p class="note">
+無料分：パスⅠ6個（1日目）とデイリー4個/日は自動で含みます。<br>
+パスⅡ・Ⅲは1回ずつ、毎日パックは1日1回ずつ、45個パックは無制限で計算しています。<br>
+パスや45個パックは、必要アイテムが足りなくなる日に割り当てています。運が良ければ後ろに回して節約できます。
+</p>
+
+<script>
+const yen=n=>n.toLocaleString()+"円";
+
+function quantileRakes(hits,cells,p){
+  let dist=[1];
+  for(let h=0;h<hits;h++){
+    const nd=new Array(dist.length+cells).fill(0);
+    for(let s=0;s<dist.length;s++){
+      if(!dist[s])continue;
+      for(let x=1;x<=cells;x++) nd[s+x]+=dist[s]/cells;
+    }
+    dist=nd;
+  }
+  let acc=0;
+  for(let s=0;s<dist.length;s++){acc+=dist[s]; if(acc>=p) return s;}
+  return dist.length-1;
+}
+
+function buildItems(days,R){
+  const items=[];
+  items.push({name:"パスⅡ",rakes:14,cost:1600,kind:"pass"});
+  items.push({name:"パスⅢ",rakes:30,cost:3200,kind:"pass"});
+  const daily=[["2個パック",2,160],["6個パック",6,800],["10個パック",10,1600],["20個パック",20,3200]];
+  for(const [n,r,c] of daily) for(let d=1;d<=days;d++) items.push({name:n,rakes:r,cost:c,kind:"daily",day:d});
+  const big=Math.ceil(R/45)+1;
+  for(let i=0;i<big;i++) items.push({name:"45個パック",rakes:45,cost:8000,kind:"big"});
+  return items;
+}
+
+function minCost(R,days){
+  if(R<=0) return {cost:0,picked:[]};
+  const items=buildItems(days,R), n=items.length, INF=1e15;
+  const dp=[new Array(R+1).fill(INF)]; dp[0][0]=0;
+  const par=[];
+  for(let i=0;i<n;i++){
+    const cur=dp[i], nx=cur.slice(), pr=new Array(R+1).fill(null);
+    const {rakes,cost}=items[i];
+    for(let j=0;j<=R;j++){
+      if(cur[j]>=INF)continue;
+      const nj=Math.min(R,j+rakes), v=cur[j]+cost;
+      if(v<nx[nj]){nx[nj]=v; pr[nj]=j;}
+    }
+    dp.push(nx); par.push(pr);
+  }
+  let j=R; const picked=[];
+  for(let i=n-1;i>=0;i--){
+    if(par[i][j]!==null && dp[i+1][j]<dp[i][j]){
+      picked.push(items[i]);
+      j=par[i][j];
+    }
+  }
+  return {cost:dp[n][R],picked};
+}
+
+let lastText="";
+
+function render(){
+  const D=Math.min(10,Math.max(1,+document.getElementById("days").value||1));
+  const freeHits=Math.max(0,+document.getElementById("freeHits").value||0);
+  const owned=Math.max(0,+document.getElementById("owned").value||0);
+  const diamond=Math.min(50,Math.max(0,+document.getElementById("diamond").value||0));
+  const cells=Math.max(2,+document.getElementById("cells").value||20);
+  const mode="sum"; // 景品はアタリを消費して交換するので、チェックした数の合計が必要
+  const luck=document.querySelector('input[name=luck]:checked').value;
+  const sel=[...document.querySelectorAll(".t:checked")].map(e=>+e.value);
+  const out=document.getElementById("out");
+  if(!sel.length){out.innerHTML='<div class="goal">ほしい景品にチェックを入れてください。</div>';lastText="";return;}
+
+  const wanted=mode==="sum"?sel.reduce((a,b)=>a+b,0):Math.max(...sel);
+  const hits=Math.max(0,wanted-freeHits);
+  const needRakes=hits===0?0:(luck==="exp"?Math.ceil(hits*(cells+1)/2):quantileRakes(hits,cells,0.9));
+  const dailyFree=4*D, passI=6;
+  const freeTotal=owned+diamond+passI+dailyFree;
+  const r=minCost(Math.max(0,needRakes-freeTotal),D);
+
+  // 日ごとの割り当て
+  const dayPacks=[],dayBig=[];
+  for(let d=1;d<=D;d++){dayPacks[d]=[];dayBig[d]=0;}
+  const passes=r.picked.filter(x=>x.kind==="pass").sort((a,b)=>a.rakes-b.rakes);
+  r.picked.filter(x=>x.kind==="daily").forEach(x=>dayPacks[x.day].push(x));
+  let bigLeft=r.picked.filter(x=>x.kind==="big").length;
+  let cum=owned+diamond+passI+passes.reduce((a,x)=>a+x.rakes,0);
+  const cums=[];
+  for(let d=1;d<=D;d++){
+    cum+=4+dayPacks[d].reduce((a,x)=>a+x.rakes,0);
+    const target=Math.ceil(needRakes*d/D);
+    while(cum<target && bigLeft>0){dayBig[d]++;bigLeft--;cum+=45;}
+    if(d===D){dayBig[d]+=bigLeft;cum+=45*bigLeft;bigLeft=0;}
+    cums[d]=cum;
+  }
+  const totalRakes=cum;
+
+  // 表示用データ
+  const freeRows=[
+    {n:`パスⅠ`,rk:passI,y:0},
+  ];
+  passes.forEach(p=>freeRows.push({n:p.name,rk:p.rakes,y:p.cost}));
+  if(diamond>0) freeRows.push({n:"ダイヤ交換",rk:diamond,y:0});
+  if(owned>0) freeRows.push({n:"手持ち",rk:owned,y:0});
+  freeRows.push({n:`デイリー（4個×${D}日）`,rk:dailyFree,y:0});
+  const freeRk=freeRows.reduce((a,x)=>a+x.rk,0);
+  const freeYen=freeRows.reduce((a,x)=>a+x.y,0);
+
+  const days=[];
+  for(let d=1;d<=D;d++){
+    const g={};
+    dayPacks[d].forEach(x=>{g[x.name]=g[x.name]||{n:x.name,rk:x.rakes,y:x.cost,c:0};g[x.name].c++;});
+    const rows=Object.values(g).sort((a,b)=>a.rk-b.rk);
+    const rowsOut=rows.map(x=>({n:x.n,c:x.c,rk:x.rk*x.c,y:x.y*x.c}));
+    if(dayBig[d]>0) rowsOut.push({n:"45個パック（都度購入）",c:dayBig[d],rk:45*dayBig[d],y:8000*dayBig[d]});
+    days.push({d,rows:rowsOut,rk:rowsOut.reduce((a,x)=>a+x.rk,0),y:rowsOut.reduce((a,x)=>a+x.y,0)});
+  }
+
+  const sumWithTxt=sel.join("・");
+  const surplus=totalRakes-needRakes;
+
+  // HTML
+  let html=`<div class="goal">
+    <div class="small">目標：アタリ${sumWithTxt}（${mode==="sum"?"合計":"最大"}${wanted}、イベント分${freeHits}を引いて自力${hits}アタリ）</div>
+    <div class="small">必要アイテム ${needRakes}個（${luck==="exp"?"平均":"安全90%"}）</div>
+    <div class="big">${yen(r.cost)}</div>
+    <div class="small">目標達成に必要な合計費用</div></div>`;
+
+  html+=`<div class="sec free"><div class="hd"><span>① 最初にやること</span><span class="r">${freeRk}個 / ${yen(freeYen)}</span></div><table>`;
+  freeRows.forEach(x=>{html+=`<tr><td>${x.n}</td><td class="num">${x.rk}個</td><td class="yen ${x.y?"":"zero"}">${yen(x.y)}</td></tr>`;});
+  html+=`</table></div>`;
+
+  days.forEach(dd=>{
+    html+=`<div class="sec day"><div class="hd"><span>🗓️ ${dd.d}日目の追加購入</span><span class="r">${dd.rk}個 / ${yen(dd.y)}</span></div>`;
+    if(!dd.rows.length) html+=`<div class="empty">買い足しなし</div>`;
+    else{
+      html+=`<table>`;
+      dd.rows.forEach(x=>{html+=`<tr><td>${x.n} ×${x.c}</td><td class="num">${x.rk}個</td><td class="yen">${yen(x.y)}</td></tr>`;});
+      html+=`</table>`;
+    }
+    html+=`</div>`;
+  });
+
+  html+=`<div class="sum2">
+    <div><span>総アイテム数</span><span>${totalRakes}個</span></div>
+    <div><span>必要アイテム数</span><span>${needRakes}個</span></div>
+    <div><span>余り</span><span>${surplus}個</span></div>
+    <div><span>全部使った場合の目安</span><span>約${(totalRakes/((cells+1)/2)).toFixed(1)}アタリ</span></div></div>`;
+  out.innerHTML=html;
+
+  // コピー用テキスト
+  let t=`--- 目標：アタリ${sumWithTxt}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
+  freeRows.forEach(x=>{t+=`・${x.n}: ${x.rk}個 (${yen(x.y)})\n`;});
+  days.forEach(dd=>{
+    t+=`\n🗓️ ${dd.d}日目の追加購入 (合計 ${dd.rk}個 / ${yen(dd.y)})\n`;
+    if(!dd.rows.length) t+="・なし\n";
+    dd.rows.forEach(x=>{t+=`・${x.n} ×${x.c}: ${x.rk}個 (${yen(x.y)})\n`;});
+  });
+  t+=`\n--- 補足 ---\n・総アイテム数: ${totalRakes}個\n・目標達成後の余り: ${surplus}個\n`;
+  lastText=t;
+}
+
+document.querySelectorAll("input").forEach(e=>e.addEventListener("input",render));
+document.getElementById("copy").addEventListener("click",async()=>{
+  const el=document.getElementById("copied");
+  try{await navigator.clipboard.writeText(lastText);el.textContent="コピーしました";}
+  catch(e){el.textContent="コピーできませんでした";}
+  setTimeout(()=>el.textContent="",2000);
+});
+render();
+</script>
+</body>
+</html>
