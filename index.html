@@ -56,9 +56,11 @@
   </div>
   <hr style="border-color:#3b3b4a">
   <label class="n">イベント日数<input id="days" type="number" value="3" min="1" max="10"></label>
-  <label class="n">成就でもらえるアタリ数<input id="freeHits" type="number" value="3" min="0"></label>
+  <label class="n">イベントでもらえるアタリ数<input id="freeHits" type="number" value="3" min="0"></label>
   <label class="n">今持っているアイテム数<input id="owned" type="number" value="0" min="0"></label>
   <label class="n">ダイヤ交換するアイテム数（0円扱い）<input id="diamond" type="number" value="0" min="0" max="50"></label>
+  <div class="opts" style="margin:6px 0"><label><input type="checkbox" id="balance" checked>45個パックを日ごとになるべく同じ回数にならす（少し高くなることがあります）</label></div>
+  <label class="n">1日に使える上限額（円・空欄は上限なし）<input id="cap" type="number" value="" min="0" step="100" placeholder="なし"></label>
   <label class="n">1周のマス数（当たり1つ）<input id="cells" type="number" value="20" min="2"></label>
 </div>
 
@@ -68,7 +70,8 @@
 <p class="note">
 無料分：パスⅠ6個（1日目）とデイリー4個/日は自動で含みます。<br>
 パスⅡ・Ⅲは1回ずつ計算しています。毎日パックは1日1回ずつで、安い順（160円→800円→1600円→3200円）にしか買えない前提です。45個パックは、その日に3200円パックを買ったときだけ、何回でも買える前提です。<br>
-パスⅡ・Ⅲは最初に買う前提で計算しています。
+日ごとの買い方は、日にちを入れ替えても合計金額は同じです。その日の買い物をまとめて入れ替えてください（毎日パックは、その日のうちにしか買えません）。<br>
+パスⅡ・Ⅲは、どの日に買ってもよい前提で、1日の上限に収まる日に入れています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
 </p>
 
 <script>
@@ -92,44 +95,70 @@ function quantileRakes(hits,cells,p){
 const DAILY=[["2個パック",2,160],["6個パック",6,800],["10個パック",10,1600],["20個パック",20,3200]];
 const PASSES=[["パスⅡ",14,1600],["パスⅢ",30,3200]];
 
-// 毎日パックは安い順にしか買えない（2個→6個→10個→20個）ので、日ごとに「どこまで買うか」を選ぶ
-function minCost(R,days){
-  if(R<=0) return {cost:0,picked:[]};
-  const groups=[];
-  PASSES.forEach(([name,rk,c])=>groups.push({opts:[{rk:0,c:0,list:[]},{rk,c,list:[{name,rakes:rk,cost:c,kind:"pass"}]}]}));
-  const K=Math.ceil(R/45)+1;
+// 1日の中の買い方：毎日パックは安い順にしか買えず（2→6→10→20個）、20個パックを買った日だけ45個パックを何回でも買える。
+// 1日の上限額(cap)があれば、その日の支出が上限を超える買い方は選ばない。
+// 同じ金額なら、日ごとの支出がなるべくならんだ買い方を選ぶ（最終日に寄せない）。
+function dayDP(R,days,cap,spend,K,m){
+  const INF=1e15;
+  const pen=x=>(x/200)*(x/200);
+  if(R<=0){
+    let pp=0; for(let d=1;d<=days;d++) pp+=pen(spend[d]);
+    return {cost:0,pen:pp,picked:[]};
+  }
+  let dc=new Array(R+1).fill(INF), dpn=new Array(R+1).fill(INF); dc[0]=0; dpn[0]=0;
+  const par=[], groups=[];
   for(let d=1;d<=days;d++){
-    const opts=[{rk:0,c:0,list:[]}]; let rk=0,c=0; const list=[];
+    const opts=[{rk:0,c:0,list:[],k:0}]; let rk=0,c=0; const list=[];
     DAILY.forEach(([name,r,cost])=>{
       rk+=r;c+=cost;list.push({name,rakes:r,cost,kind:"daily",day:d});
-      opts.push({rk,c,list:list.slice()});
+      opts.push({rk,c,list:list.slice(),k:0});
     });
-    // 3200円パックを買った日だけ、45個パックを何回でも買える
     const base=opts[opts.length-1];
-    for(let k=1;k<=K;k++) opts.push({rk:base.rk+45*k,c:base.c+8000*k,list:base.list.concat(Array.from({length:k},()=>({name:"45個パック",rakes:45,cost:8000,kind:"big",day:d})))});
-    groups.push({opts});
+    for(let k=1;k<=K;k++) opts.push({k,rk:base.rk+45*k,c:base.c+8000*k,list:base.list.concat(Array.from({length:k},()=>({name:"45個パック",rakes:45,cost:8000,kind:"big",day:d})))});
+    const ok=opts.filter(o=>spend[d]+o.c<=cap&&(m===null||(o.k===0?m===0:(o.k===m||o.k===m+1)))).map(o=>({...o,pen:pen(spend[d]+o.c)}));
+    groups.push(ok);
   }
-  const n=groups.length, INF=1e15;
-  let dp=new Array(R+1).fill(INF); dp[0]=0;
-  const par=[];
-  for(let i=0;i<n;i++){
-    const nx=new Array(R+1).fill(INF), pr=new Array(R+1).fill(null);
+  for(let i=0;i<groups.length;i++){
+    const nc=new Array(R+1).fill(INF), np=new Array(R+1).fill(INF), pr=new Array(R+1).fill(null);
     for(let j=0;j<=R;j++){
-      if(dp[j]>=INF)continue;
-      groups[i].opts.forEach((o,oi)=>{
-        const nj=Math.min(R,j+o.rk), v=dp[j]+o.c;
-        if(v<nx[nj]){nx[nj]=v; pr[nj]={j,oi};}
+      if(dc[j]>=INF)continue;
+      groups[i].forEach((o,oi)=>{
+        const nj=Math.min(R,j+o.rk), v=dc[j]+o.c, q=dpn[j]+o.pen;
+        if(v<nc[nj]||(v===nc[nj]&&q<np[nj])){nc[nj]=v;np[nj]=q;pr[nj]={j,oi};}
       });
     }
-    dp=nx; par.push(pr);
+    dc=nc; dpn=np; par.push(pr);
   }
+  if(dc[R]>=INF) return null;
   let j=R; const picked=[];
-  for(let i=n-1;i>=0;i--){
+  for(let i=groups.length-1;i>=0;i--){
     const p=par[i][j];
-    groups[i].opts[p.oi].list.forEach(x=>picked.push(x));
+    groups[i][p.oi].list.forEach(x=>picked.push(x));
     j=p.j;
   }
-  return {cost:dp[R],picked};
+  return {cost:dc[R],pen:dpn[R],picked};
+}
+
+function minCost(R,days,cap,balance){
+  if(R<=0) return {cost:0,picked:[]};
+  const K=Math.ceil(R/45)+1;
+  const ms=balance?Array.from({length:Math.ceil(R/(45*days))+2},(_,i)=>i):[null];
+  let best=null;
+  // パスⅡ・パスⅢは「買わない／何日目に買う」を全部試す
+  for(let a=0;a<=days;a++) for(let b=0;b<=days;b++){
+    const spend=new Array(days+1).fill(0); let pr=0, pc=0; const pl=[];
+    if(a){spend[a]+=1600;pr+=14;pc+=1600;pl.push({name:"パスⅡ",rakes:14,cost:1600,kind:"pass",day:a});}
+    if(b){spend[b]+=3200;pr+=30;pc+=3200;pl.push({name:"パスⅢ",rakes:30,cost:3200,kind:"pass",day:b});}
+    if(spend.some(x=>x>cap)) continue;
+    // balance=true：45個パックは、どの日も「m回かm+1回」になるようにならす
+    for(const m of ms){
+      const res=dayDP(Math.max(0,R-pr),days,cap,spend,K,m);
+      if(!res) continue;
+      const total=res.cost+pc;
+      if(!best||total<best.cost||(total===best.cost&&res.pen<best.pen)) best={cost:total,pen:res.pen,picked:pl.concat(res.picked)};
+    }
+  }
+  return best;
 }
 
 let lastText="";
@@ -151,15 +180,28 @@ function render(){
   const needRakes=hits===0?0:(luck==="exp"?Math.ceil(hits*(cells+1)/2):quantileRakes(hits,cells,0.9));
   const dailyFree=4*D, passI=6;
   const freeTotal=owned+diamond+passI+dailyFree;
-  const r=minCost(Math.max(0,needRakes-freeTotal),D);
+  const capIn=+document.getElementById("cap").value;
+  const cap=capIn>0?capIn:Infinity;
+  const balance=document.getElementById("balance").checked;
+  const Rneed=Math.max(0,needRakes-freeTotal);
+  let r=minCost(Rneed,D,cap,balance);
+  let balNote="";
+  if(balance){
+    const r0=minCost(Rneed,D,cap,false);
+    if(!r&&r0){r=r0;balNote="ならして買うと上限に収まらないため、ならさない買い方を表示しています。";}
+    else if(r&&r0&&r.cost>r0.cost) balNote="ならさない場合より "+yen(r.cost-r0.cost)+" 高くなります（最安は "+yen(r0.cost)+"）。";
+  }
+  if(!r){
+    out.innerHTML='<div class="goal"><div class="big" style="font-size:1.2rem">1日'+yen(capIn)+'の上限では、目標のアイテム数に届きません。</div><div class="small">上限を上げるか、ほしい景品を減らしてください。</div></div>';
+    lastText="";return;
+  }
 
   // 日ごとの割り当て
   const dayPacks=[],dayBig=[];
   for(let d=1;d<=D;d++){dayPacks[d]=[];dayBig[d]=0;}
-  const passes=r.picked.filter(x=>x.kind==="pass").sort((a,b)=>a.rakes-b.rakes);
-  r.picked.filter(x=>x.kind==="daily").forEach(x=>dayPacks[x.day].push(x));
+  r.picked.filter(x=>x.kind==="daily"||x.kind==="pass").forEach(x=>dayPacks[x.day].push(x));
   r.picked.filter(x=>x.kind==="big").forEach(x=>dayBig[x.day]++);
-  let cum=owned+diamond+passI+passes.reduce((a,x)=>a+x.rakes,0);
+  let cum=owned+diamond+passI;
   const cums=[];
   for(let d=1;d<=D;d++){
     cum+=4+dayPacks[d].reduce((a,x)=>a+x.rakes,0)+45*dayBig[d];
@@ -171,7 +213,6 @@ function render(){
   const freeRows=[
     {n:`パスⅠ`,rk:passI,y:0},
   ];
-  passes.forEach(p=>freeRows.push({n:p.name,rk:p.rakes,y:p.cost}));
   if(diamond>0) freeRows.push({n:"ダイヤ交換",rk:diamond,y:0});
   if(owned>0) freeRows.push({n:"手持ち",rk:owned,y:0});
   freeRows.push({n:`デイリー（4個×${D}日）`,rk:dailyFree,y:0});
@@ -196,6 +237,8 @@ function render(){
     <div class="small">目標：アタリ${sumWithTxt}（${mode==="sum"?"合計":"最大"}${wanted}、イベント分${freeHits}を引いて自力${hits}アタリ）</div>
     <div class="small">必要アイテム ${needRakes}個（${luck==="exp"?"平均":"安全90%"}）</div>
     <div class="big">${yen(r.cost)}</div>
+    ${balNote?`<div class="small">${balNote}</div>`:""}
+    <div class="small">※日にちを入れ替えても合計金額は同じです（その日の買い物をまとめて入れ替えてください）。</div>
     <div class="small">目標達成に必要な合計費用</div></div>`;
 
   html+=`<div class="sec free"><div class="hd"><span>① 最初にやること</span><span class="r">${freeRk}個 / ${yen(freeYen)}</span></div><table>`;
@@ -221,14 +264,14 @@ function render(){
   out.innerHTML=html;
 
   // コピー用テキスト
-  let t=`--- 目標：アタリ${sumWithTxt}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
+  let t=`--- 目標：アタリ${sumWithTxt}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n${balNote?balNote+"\n":""}\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
   freeRows.forEach(x=>{t+=`・${x.n}: ${x.rk}個 (${yen(x.y)})\n`;});
   days.forEach(dd=>{
     t+=`\n🗓️ ${dd.d}日目の追加購入 (合計 ${dd.rk}個 / ${yen(dd.y)})\n`;
     if(!dd.rows.length) t+="・なし\n";
     dd.rows.forEach(x=>{t+=`・${x.n} ×${x.c}: ${x.rk}個 (${yen(x.y)})\n`;});
   });
-  t+=`\n--- 補足 ---\n・総アイテム数: ${totalRakes}個\n・目標達成後の余り: ${surplus}個\n`;
+  t+=`\n--- 補足 ---\n・日にちを入れ替えても合計金額は同じ（その日の買い物をまとめて入れ替える）\n・総アイテム数: ${totalRakes}個\n・目標達成後の余り: ${surplus}個\n`;
   lastText=t;
 }
 
