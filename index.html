@@ -13,7 +13,10 @@
   .box h3{margin:0 0 6px;font-size:.95rem;color:var(--sub)}
   label.n{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0}
   input[type=number]{width:90px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;font-size:1rem;text-align:right}
-  input[type=text]{width:55%;max-width:240px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;font-size:1rem}
+  .prow{display:flex;align-items:center;flex-wrap:nowrap;gap:2px;margin:2px 0}
+  .prow b{width:3.2em;flex:none}
+  .prow label{display:inline-flex;align-items:center;gap:3px;margin:3px 10px 3px 0;white-space:nowrap}
+  .prow input{width:20px;height:20px}
   .opts label{display:inline-flex;align-items:center;gap:4px;margin:4px 14px 4px 0}
   .opts input{width:20px;height:20px}
   .goal{background:linear-gradient(135deg,#3a3350,#2a2a35);border:1px solid #5a4d85;border-radius:12px;padding:14px;margin-bottom:14px}
@@ -43,9 +46,16 @@
 <h1>アイテム最安計算 <small style="font-size:.7em;color:#a9a9b8">（カードめくり）</small></h1>
 
 <div class="box">
-  <h3>ほしい景品（アタリ数）</h3>
-  <div id="prizeBoxes" class="opts"></div>
-  <label class="n" style="margin-top:6px">景品のアタリ数（カンマか空白で区切る）<input id="prizeList" type="text" value="50, 30, 10, 5" autocomplete="off" inputmode="text"></label>
+  <label class="n"><span>ほしいアタリ数（景品の合計）</span><input id="wantHits" type="number" value="5" min="1" step="1" inputmode="numeric"></label>
+  <h3 style="margin-top:8px">パスの買い方（パスⅠは無料）</h3>
+  <div class="prow"><b>パスⅡ</b>
+    <label><input type="radio" name="pa" value="auto" checked>おまかせ</label>
+    <label><input type="radio" name="pa" value="yes">買う</label>
+    <label><input type="radio" name="pa" value="no">買わない</label></div>
+  <div class="prow"><b>パスⅢ</b>
+    <label><input type="radio" name="pb" value="auto" checked>おまかせ</label>
+    <label><input type="radio" name="pb" value="yes">買う</label>
+    <label><input type="radio" name="pb" value="no">買わない</label></div>
   <h3 style="margin-top:8px">運の見積もり</h3>
   <div class="opts">
     <label><input type="radio" name="luck" value="exp" checked>平均</label>
@@ -73,7 +83,8 @@
 パスⅡ・Ⅲは1回ずつ計算しています。毎日パックは1日1回ずつで、安い順（160円→800円→1600円→3200円）にしか買えない前提です。45個パックは、その日に3200円パックを買ったときだけ、何回でも買える前提です。<br>
 「最終日は微調整用」は、最終日に45個パックを買わず、2〜20個の小さいパックで足りない分を合わせる買い方です。運でアイテムの必要数がずれても、最終日に調整できます。<br>
 日ごとの買い方は、日にちを入れ替えても合計金額は同じです。その日の買い物をまとめて入れ替えてください（毎日パックは、その日のうちにしか買えません）。<br>
-パスⅡ・Ⅲは、買うほうが安いとき、または買っても金額が変わらないときに「最初にやること」に出します（パスにはおまけがあるため）。最初に買う前提で、1日目の上限額に含めて計算しています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
+パスⅡ・Ⅲは、「おまかせ」のときは、買うほうが安くなるときだけ「最初にやること」に出します。「買う」「買わない」を選ぶと、そのとおりに計算します。パスⅡが入らないときは、パスⅡを足した場合の増える金額を、結果の上のほうに小さく出します。<br>
+パスのアイテムは、デイリー任務のポイントを集めながら少しずつもらえます。この計算では、期間中に全部もらえる前提です。最初に買う前提で、1日目の上限額に含めています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
 </p>
 
 <script>
@@ -146,15 +157,17 @@ function dayDP(R,days,cap,spend,K,m,mode){
   return {cost:dc[R],pen:dpn[R],picked};
 }
 
-function minCost(R,days,cap,mode){
-  if(R<=0) return {cost:0,picked:[]};
+function minCost(R,days,cap,mode,po){
+  if(R<=0&&!(po&&(po.a==="yes"||po.b==="yes"))) return {cost:0,picked:[]};
   const K=Math.ceil(R/45)+1;
   if(mode==="tune"&&days<2) mode="cheap";
   const spreadDays=mode==="tune"?days-1:days;
   const ms=mode==="cheap"?[null]:Array.from({length:Math.ceil(R/(45*spreadDays))+2},(_,i)=>i);
   let best=null;
   // パスⅡ・パスⅢは「買う／買わない」を全部試す（買うときは最初に買う＝1日目の支出として数える）
-  for(let a=0;a<=1;a++) for(let b=0;b<=1;b++){
+  const as=po&&po.a==="yes"?[1]:po&&po.a==="no"?[0]:[0,1];
+  const bs=po&&po.b==="yes"?[1]:po&&po.b==="no"?[0]:[0,1];
+  for(const a of as) for(const b of bs){
     const spend=new Array(days+1).fill(0); let pr=0, pc=0; const pl=[];
     if(a){spend[1]+=1600;pr+=14;pc+=1600;pl.push({name:"パスⅡ",rakes:14,cost:1600,kind:"pass",day:1});}
     if(b){spend[1]+=3200;pr+=30;pc+=3200;pl.push({name:"パスⅢ",rakes:30,cost:3200,kind:"pass",day:1});}
@@ -164,8 +177,8 @@ function minCost(R,days,cap,mode){
       const res=dayDP(Math.max(0,R-pr),days,cap,spend,K,m,mode);
       if(!res) continue;
       const total=res.cost+pc;
-      const np=pl.length; // 同じ金額なら、パスを買うほうを優先（パスにはおまけがあるため）
-      if(!best||total<best.cost||(total===best.cost&&(np>best.np||(np===best.np&&res.pen<best.pen)))) best={cost:total,pen:res.pen,np,picked:pl.concat(res.picked)};
+      const np=pl.length; // 同じ金額なら、パスを買わないほうを選ぶ（パスは「安くなるとき」だけ出す）
+      if(!best||total<best.cost||(total===best.cost&&(np<best.np||(np===best.np&&res.pen<best.pen)))) best={cost:total,pen:res.pen,np,picked:pl.concat(res.picked)};
     }
   }
   return best;
@@ -178,13 +191,11 @@ function render(){
   const freeHits=Math.max(0,+document.getElementById("freeHits").value||0);
   const diamond=Math.min(50,Math.max(0,+document.getElementById("diamond").value||0));
   const cells=Math.max(2,+document.getElementById("cells").value||20);
-  const mode="sum"; // 景品はアタリを消費して交換するので、チェックした数の合計が必要
   const luck=document.querySelector('input[name=luck]:checked').value;
-  const sel=[...document.querySelectorAll(".t:checked")].map(e=>+e.value);
+  const wanted=Math.max(0,Math.floor(+document.getElementById("wantHits").value||0));
   const out=document.getElementById("out");
-  if(!sel.length){out.innerHTML='<div class="goal">ほしい景品にチェックを入れてください。</div>';lastText="";return;}
+  if(!wanted){out.innerHTML='<div class="goal">ほしいアタリ数を入れてください。</div>';lastText="";return;}
 
-  const wanted=mode==="sum"?sel.reduce((a,b)=>a+b,0):Math.max(...sel);
   const hits=Math.max(0,wanted-freeHits);
   const needRakes=hits===0?0:(luck==="exp"?Math.ceil(hits*(cells+1)/2):quantileRakes(hits,cells,0.9));
   const dailyFree=4*D, passI=6;
@@ -193,16 +204,31 @@ function render(){
   const cap=capIn>0?capIn:Infinity;
   const buyStyle=document.querySelector('input[name=style]:checked').value;
   const Rneed=Math.max(0,needRakes-freeTotal);
-  let r=minCost(Rneed,D,cap,buyStyle);
+  const po={a:document.querySelector('input[name=pa]:checked').value,b:document.querySelector('input[name=pb]:checked').value};
+  let r=minCost(Rneed,D,cap,buyStyle,po);
   let balNote="";
   if(buyStyle!=="cheap"){
-    const r0=minCost(Rneed,D,cap,"cheap");
+    const r0=minCost(Rneed,D,cap,"cheap",po);
     if(!r&&r0){r=r0;balNote="この買い方だと上限に収まらないため、最安の買い方を表示しています。";}
     else if(r&&r0&&r.cost>r0.cost) balNote="最安より "+yen(r.cost-r0.cost)+" 高くなります（最安は "+yen(r0.cost)+"）。";
   }
   if(!r){
-    out.innerHTML='<div class="goal"><div class="big" style="font-size:1.2rem">1日'+yen(capIn)+'の上限では、目標のアイテム数に届きません。</div><div class="small">上限を上げるか、ほしい景品を減らしてください。</div></div>';
+    out.innerHTML='<div class="goal"><div class="big" style="font-size:1.2rem">1日'+yen(capIn)+'の上限では、目標のアイテム数に届きません。</div><div class="small">上限を上げるか、ほしいアタリ数を減らしてください。</div></div>';
     lastText="";return;
+  }
+  // パスⅡが入っていないときは、「パスⅡを足したらいくら増えるか」を調べて、小さく表示する
+  let iiNote="";
+  const usedStyle=balNote.startsWith("この買い方")?"cheap":buyStyle;
+  if(po.a==="auto"&&!r.picked.some(x=>x.name==="パスⅡ")){
+    const rf=minCost(Rneed,D,cap,usedStyle,{a:"yes",b:po.b});
+    if(rf){const ex=rf.cost-r.cost;iiNote=ex<=0?"パスⅡ（おまけつき）を足しても金額は同じです。":"パスⅡ（おまけつき）を足す場合：あと "+yen(ex)+" 増えます（合計 "+yen(rf.cost)+"）。";}
+  }
+
+  // パスを「買う／買わない」と決めたせいで、おまかせより高くなるとき
+  let passNote="";
+  if(po.a!=="auto"||po.b!=="auto"){
+    const ra=minCost(Rneed,D,cap,usedStyle,{a:"auto",b:"auto"});
+    if(ra&&r.cost>ra.cost) passNote="パスの指定で、おまかせより "+yen(r.cost-ra.cost)+" 高くなります（おまかせは "+yen(ra.cost)+"）。";
   }
 
   // 日ごとの割り当て
@@ -239,15 +265,16 @@ function render(){
     days.push({d,rows:rowsOut,rk:rowsOut.reduce((a,x)=>a+x.rk,0),y:rowsOut.reduce((a,x)=>a+x.y,0)});
   }
 
-  const sumWithTxt=sel.join("・");
   const surplus=totalRakes-needRakes;
 
   // HTML
   let html=`<div class="goal">
-    <div class="small">目標：アタリ${sumWithTxt}（${mode==="sum"?"合計":"最大"}${wanted}、イベント分${freeHits}を引いて自力${hits}アタリ）</div>
+    <div class="small">目標：アタリ${wanted}（イベント分${freeHits}を引いて自力${hits}アタリ）</div>
     <div class="small">必要アイテム ${needRakes}個（${luck==="exp"?"平均":"安全90%"}）</div>
     <div class="big">${yen(r.cost)}</div>
     ${balNote?`<div class="small">${balNote}</div>`:""}
+    ${passNote?`<div class="small">${passNote}</div>`:""}
+    ${iiNote?`<div class="small">${iiNote}</div>`:""}
     <div class="small">※日にちを入れ替えても合計金額は同じです（その日の買い物をまとめて入れ替えてください）。</div>
     <div class="small">目標達成に必要な合計費用</div></div>`;
 
@@ -274,7 +301,7 @@ function render(){
   out.innerHTML=html;
 
   // コピー用テキスト
-  let t=`--- 目標：アタリ${sumWithTxt}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n${balNote?balNote+"\n":""}\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
+  let t=`--- 目標：アタリ${wanted}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n${balNote?balNote+"\n":""}\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
   freeRows.forEach(x=>{t+=`・${x.n}: ${x.rk}個 (${yen(x.y)})\n`;});
   days.forEach(dd=>{
     t+=`\n🗓️ ${dd.d}日目の追加購入 (合計 ${dd.rk}個 / ${yen(dd.y)})\n`;
@@ -285,17 +312,8 @@ function render(){
   lastText=t;
 }
 
-// 景品のアタリ数リストからチェックボックスを作る（チェックの状態は、同じ数字なら引き継ぐ）
-function buildPrizes(initial){
-  const raw=document.getElementById("prizeList").value;
-  const nums=[...new Set(raw.split(/[,\s、，]+/).map(x=>Math.floor(+x)).filter(x=>x>0&&x<=9999))].sort((a,b)=>b-a).slice(0,12);
-  const box=document.getElementById("prizeBoxes");
-  const was=new Set([...document.querySelectorAll(".t:checked")].map(e=>+e.value));
-  box.innerHTML=nums.map(n=>`<label><input type="checkbox" class="t" value="${n}"${(initial?n===nums[nums.length-1]:was.has(n))?" checked":""}>${n}</label>`).join("");
-  try{localStorage.setItem("cardflip_prizes",raw);}catch(e){}
-}
 document.addEventListener("input",e=>{
-  if(e.target.id==="prizeList") buildPrizes(false);
+  if(e.target.id==="wantHits"){try{localStorage.setItem("cardflip_want",e.target.value);}catch(err){}}
   render();
 });
 document.getElementById("copy").addEventListener("click",async()=>{
@@ -304,8 +322,7 @@ document.getElementById("copy").addEventListener("click",async()=>{
   catch(e){el.textContent="コピーできませんでした";}
   setTimeout(()=>el.textContent="",2000);
 });
-try{const sv=localStorage.getItem("cardflip_prizes");if(sv&&sv.trim())document.getElementById("prizeList").value=sv;}catch(e){}
-buildPrizes(true);
+try{const sv=localStorage.getItem("cardflip_want");if(sv&&+sv>0)document.getElementById("wantHits").value=sv;}catch(e){}
 render();
 </script>
 </body>
