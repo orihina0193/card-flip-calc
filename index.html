@@ -13,6 +13,7 @@
   .box h3{margin:0 0 6px;font-size:.95rem;color:var(--sub)}
   label.n{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0}
   input[type=number]{width:90px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;font-size:1rem;text-align:right}
+  input[type=text]{width:55%;max-width:240px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;font-size:1rem}
   .opts label{display:inline-flex;align-items:center;gap:4px;margin:4px 14px 4px 0}
   .opts input{width:20px;height:20px}
   .goal{background:linear-gradient(135deg,#3a3350,#2a2a35);border:1px solid #5a4d85;border-radius:12px;padding:14px;margin-bottom:14px}
@@ -43,12 +44,8 @@
 
 <div class="box">
   <h3>ほしい景品（アタリ数）</h3>
-  <div class="opts">
-    <label><input type="checkbox" class="t" value="50">50</label>
-    <label><input type="checkbox" class="t" value="30">30</label>
-    <label><input type="checkbox" class="t" value="10">10</label>
-    <label><input type="checkbox" class="t" value="5" checked>5</label>
-  </div>
+  <div id="prizeBoxes" class="opts"></div>
+  <label class="n" style="margin-top:6px">景品のアタリ数（カンマか空白で区切る）<input id="prizeList" type="text" value="50, 30, 10, 5" autocomplete="off" inputmode="text"></label>
   <h3 style="margin-top:8px">運の見積もり</h3>
   <div class="opts">
     <label><input type="radio" name="luck" value="exp" checked>平均</label>
@@ -76,7 +73,7 @@
 パスⅡ・Ⅲは1回ずつ計算しています。毎日パックは1日1回ずつで、安い順（160円→800円→1600円→3200円）にしか買えない前提です。45個パックは、その日に3200円パックを買ったときだけ、何回でも買える前提です。<br>
 「最終日は微調整用」は、最終日に45個パックを買わず、2〜20個の小さいパックで足りない分を合わせる買い方です。運でアイテムの必要数がずれても、最終日に調整できます。<br>
 日ごとの買い方は、日にちを入れ替えても合計金額は同じです。その日の買い物をまとめて入れ替えてください（毎日パックは、その日のうちにしか買えません）。<br>
-パスⅡ・Ⅲは、買うほうが安いときだけ「最初にやること」に出します。最初に買う前提で、1日目の上限額に含めて計算しています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
+パスⅡ・Ⅲは、買うほうが安いとき、または買っても金額が変わらないときに「最初にやること」に出します（パスにはおまけがあるため）。最初に買う前提で、1日目の上限額に含めて計算しています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
 </p>
 
 <script>
@@ -167,7 +164,8 @@ function minCost(R,days,cap,mode){
       const res=dayDP(Math.max(0,R-pr),days,cap,spend,K,m,mode);
       if(!res) continue;
       const total=res.cost+pc;
-      if(!best||total<best.cost||(total===best.cost&&res.pen<best.pen)) best={cost:total,pen:res.pen,picked:pl.concat(res.picked)};
+      const np=pl.length; // 同じ金額なら、パスを買うほうを優先（パスにはおまけがあるため）
+      if(!best||total<best.cost||(total===best.cost&&(np>best.np||(np===best.np&&res.pen<best.pen)))) best={cost:total,pen:res.pen,np,picked:pl.concat(res.picked)};
     }
   }
   return best;
@@ -287,13 +285,27 @@ function render(){
   lastText=t;
 }
 
-document.querySelectorAll("input").forEach(e=>e.addEventListener("input",render));
+// 景品のアタリ数リストからチェックボックスを作る（チェックの状態は、同じ数字なら引き継ぐ）
+function buildPrizes(initial){
+  const raw=document.getElementById("prizeList").value;
+  const nums=[...new Set(raw.split(/[,\s、，]+/).map(x=>Math.floor(+x)).filter(x=>x>0&&x<=9999))].sort((a,b)=>b-a).slice(0,12);
+  const box=document.getElementById("prizeBoxes");
+  const was=new Set([...document.querySelectorAll(".t:checked")].map(e=>+e.value));
+  box.innerHTML=nums.map(n=>`<label><input type="checkbox" class="t" value="${n}"${(initial?n===nums[nums.length-1]:was.has(n))?" checked":""}>${n}</label>`).join("");
+  try{localStorage.setItem("cardflip_prizes",raw);}catch(e){}
+}
+document.addEventListener("input",e=>{
+  if(e.target.id==="prizeList") buildPrizes(false);
+  render();
+});
 document.getElementById("copy").addEventListener("click",async()=>{
   const el=document.getElementById("copied");
   try{await navigator.clipboard.writeText(lastText);el.textContent="コピーしました";}
   catch(e){el.textContent="コピーできませんでした";}
   setTimeout(()=>el.textContent="",2000);
 });
+try{const sv=localStorage.getItem("cardflip_prizes");if(sv&&sv.trim())document.getElementById("prizeList").value=sv;}catch(e){}
+buildPrizes(true);
 render();
 </script>
 </body>
