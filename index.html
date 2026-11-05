@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>アイテム最安計算（カードめくり）</title>
+<title>チケット最安計算（カードめくり）</title>
 <style>
   :root{--bg:#1b1b22;--card:#2a2a35;--inner:#20202a;--line:#3b3b4a;--text:#eee;--sub:#a9a9b8;--gold:#ffd166;--green:#6ee7a8;--blue:#7cc4ff}
   *{box-sizing:border-box}
@@ -43,10 +43,10 @@
 </style>
 </head>
 <body>
-<h1>アイテム最安計算 <small style="font-size:.7em;color:#a9a9b8">（カードめくり）</small></h1>
+<h1>チケット最安計算 <small style="font-size:.7em;color:#a9a9b8">（カードめくり）</small></h1>
 
 <div class="box">
-  <label class="n"><span>ほしいアタリ数（景品の合計）</span><input id="wantHits" type="number" value="5" min="1" step="1" inputmode="numeric"></label>
+  <label class="n"><span>ほしい金の星の数（景品の合計）</span><input id="wantHits" type="number" value="5" min="1" step="1" inputmode="numeric"></label>
   <h3 style="margin-top:8px">パスの買い方（パスⅠは無料）</h3>
   <div class="prow"><b>パスⅡ</b>
     <label><input type="radio" name="pa" value="auto" checked>おまかせ</label>
@@ -63,8 +63,8 @@
   </div>
   <hr style="border-color:#3b3b4a">
   <label class="n">イベント日数<input id="days" type="number" value="3" min="1" max="10"></label>
-  <label class="n">イベントでもらえるアタリ数<input id="freeHits" type="number" value="3" min="0"></label>
-  <label class="n">ダイヤ交換するアイテム数（0円扱い）<input id="diamond" type="number" value="0" min="0" max="50"></label>
+  <label class="n">イベントでもらえる金の星の数<input id="freeHits" type="number" value="3" min="0"></label>
+  <label class="n">ダイヤ交換するチケット数（0円扱い）<input id="diamond" type="number" value="0" min="0" max="50"></label>
   <h3 style="margin-top:8px">45個パックの買い方</h3>
   <div class="opts">
     <label><input type="radio" name="style" value="tune" checked>最終日は微調整用（おすすめ）</label>
@@ -72,7 +72,7 @@
     <label><input type="radio" name="style" value="even">全日ならす</label>
   </div>
   <label class="n">1日に使える上限額（円・空欄は上限なし）<input id="cap" type="number" value="" min="0" step="100" placeholder="なし"></label>
-  <label class="n">1周のマス数（当たり1つ）<input id="cells" type="number" value="20" min="2"></label>
+  <label class="n">1周のマス数（金の星1つ）<input id="cells" type="number" value="20" min="2"></label>
 </div>
 
 <div id="out"></div>
@@ -81,10 +81,10 @@
 <p class="note">
 無料分：パスⅠ6個（1日目）とデイリー4個/日は自動で含みます。<br>
 パスⅡ・Ⅲは1回ずつ計算しています。毎日パックは1日1回ずつで、安い順（160円→800円→1600円→3200円）にしか買えない前提です。45個パックは、その日に3200円パックを買ったときだけ、何回でも買える前提です。<br>
-「最終日は微調整用」は、最終日に45個パックを買わず、2〜20個の小さいパックで足りない分を合わせる買い方です。運でアイテムの必要数がずれても、最終日に調整できます。<br>
+「最終日は微調整用」は、最終日に45個パックを買わず、2〜20個の小さいパックで足りない分を合わせる買い方です。運でチケットの必要数がずれても、最終日に調整できます。<br>
 日ごとの買い方は、日にちを入れ替えても合計金額は同じです。その日の買い物をまとめて入れ替えてください（毎日パックは、その日のうちにしか買えません）。<br>
 パスⅡ・Ⅲは、「おまかせ」のときは、買うほうが安くなるときだけ「最初にやること」に出します。「買う」「買わない」を選ぶと、そのとおりに計算します。パスⅡが入らないときは、パスⅡを足した場合の増える金額を、結果の上のほうに小さく出します。<br>
-パスのアイテムは、デイリー任務のポイントを集めながら少しずつもらえます。この計算では、期間中に全部もらえる前提です。最初に買う前提で、1日目の上限額に含めています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
+パスのチケットは、デイリー任務のポイントを集めながら少しずつもらえます。この計算では、期間中に全部もらえる前提です。最初に買う前提で、1日目の上限額に含めています。同じ金額なら、日ごとの支出がなるべくならぶようにしています。
 </p>
 
 <script>
@@ -194,7 +194,7 @@ function render(){
   const luck=document.querySelector('input[name=luck]:checked').value;
   const wanted=Math.max(0,Math.floor(+document.getElementById("wantHits").value||0));
   const out=document.getElementById("out");
-  if(!wanted){out.innerHTML='<div class="goal">ほしいアタリ数を入れてください。</div>';lastText="";return;}
+  if(!wanted){out.innerHTML='<div class="goal">ほしい金の星の数を入れてください。</div>';lastText="";return;}
 
   const hits=Math.max(0,wanted-freeHits);
   const needRakes=hits===0?0:(luck==="exp"?Math.ceil(hits*(cells+1)/2):quantileRakes(hits,cells,0.9));
@@ -213,7 +213,7 @@ function render(){
     else if(r&&r0&&r.cost>r0.cost) balNote="最安より "+yen(r.cost-r0.cost)+" 高くなります（最安は "+yen(r0.cost)+"）。";
   }
   if(!r){
-    out.innerHTML='<div class="goal"><div class="big" style="font-size:1.2rem">1日'+yen(capIn)+'の上限では、目標のアイテム数に届きません。</div><div class="small">上限を上げるか、ほしいアタリ数を減らしてください。</div></div>';
+    out.innerHTML='<div class="goal"><div class="big" style="font-size:1.2rem">1日'+yen(capIn)+'の上限では、目標のチケット数に届きません。</div><div class="small">上限を上げるか、ほしい金の星の数を減らしてください。</div></div>';
     lastText="";return;
   }
   // パスⅡが入っていないときは、「パスⅡを足したらいくら増えるか」を調べて、小さく表示する
@@ -269,8 +269,8 @@ function render(){
 
   // HTML
   let html=`<div class="goal">
-    <div class="small">目標：アタリ${wanted}（イベント分${freeHits}を引いて自力${hits}アタリ）</div>
-    <div class="small">必要アイテム ${needRakes}個（${luck==="exp"?"平均":"安全90%"}）</div>
+    <div class="small">目標：金の星${wanted}個（イベント分${freeHits}個を引いて自力${hits}個）</div>
+    <div class="small">必要チケット ${needRakes}個（${luck==="exp"?"平均":"安全90%"}）</div>
     <div class="big">${yen(r.cost)}</div>
     ${balNote?`<div class="small">${balNote}</div>`:""}
     ${passNote?`<div class="small">${passNote}</div>`:""}
@@ -294,21 +294,21 @@ function render(){
   });
 
   html+=`<div class="sum2">
-    <div><span>総アイテム数</span><span>${totalRakes}個</span></div>
-    <div><span>必要アイテム数</span><span>${needRakes}個</span></div>
+    <div><span>総チケット数</span><span>${totalRakes}個</span></div>
+    <div><span>必要チケット数</span><span>${needRakes}個</span></div>
     <div><span>余り</span><span>${surplus}個</span></div>
-    <div><span>全部使った場合の目安</span><span>約${(totalRakes/((cells+1)/2)).toFixed(1)}アタリ</span></div></div>`;
+    <div><span>全部使った場合の目安</span><span>約${(totalRakes/((cells+1)/2)).toFixed(1)}個分の金の星</span></div></div>`;
   out.innerHTML=html;
 
   // コピー用テキスト
-  let t=`--- 目標：アタリ${wanted}（自力${hits}アタリ・アイテム${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n${balNote?balNote+"\n":""}\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
+  let t=`--- 目標：金の星${wanted}個（自力${hits}個・チケット${needRakes}個） ---\n✅ 目標達成に必要な合計費用: ${yen(r.cost)}\n${balNote?balNote+"\n":""}\n[最初にやること（期間中合計 ${freeRk}個）]\n`;
   freeRows.forEach(x=>{t+=`・${x.n}: ${x.rk}個 (${yen(x.y)})\n`;});
   days.forEach(dd=>{
     t+=`\n🗓️ ${dd.d}日目の追加購入 (合計 ${dd.rk}個 / ${yen(dd.y)})\n`;
     if(!dd.rows.length) t+="・なし\n";
     dd.rows.forEach(x=>{t+=`・${x.n} ×${x.c}: ${x.rk}個 (${yen(x.y)})\n`;});
   });
-  t+=`\n--- 補足 ---\n・日にちを入れ替えても合計金額は同じ（その日の買い物をまとめて入れ替える）\n・総アイテム数: ${totalRakes}個\n・目標達成後の余り: ${surplus}個\n`;
+  t+=`\n--- 補足 ---\n・日にちを入れ替えても合計金額は同じ（その日の買い物をまとめて入れ替える）\n・総チケット数: ${totalRakes}個\n・目標達成後の余り: ${surplus}個\n`;
   lastText=t;
 }
 
